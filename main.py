@@ -1,6 +1,20 @@
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 
+DEFAULT_FONT_FAMILY = "Times New Roman, Times, serif"
+DEFAULT_FONT_SIZE = 20
+DEFAULT_STROKE_WIDTH = 1
+DEFAULT_TEXT_COLOR = "black"
+DEFAULT_BOX_FILL = "none"
+DEFAULT_BOX_STROKE = "black"
+DEFAULT_OUTER_PADDING = 10
+DEFAULT_VERTICAL_GAP = 0
+DEFAULT_FIT_TO_MAX_WIDTH = True
+DEFAULT_AS_SINGLE_CELL = True
+DEFAULT_TITLE_PADDING = (16, 8)
+DEFAULT_TYPE_PADDING = (16, 8)
+DEFAULT_DESCRIPTION_PADDING = (16, 8)
+
 
 def _measure_text_tk(text: str, font_family: str, font_size: int) -> dict:
     """
@@ -309,31 +323,58 @@ def make_svg_card_3_lines(
     }
 
 
-if __name__ == "__main__":
-    result = make_svg_card_3_lines(
-        title="Название поля",
-        data_type="[string]",
-        description="Описание поля",
-        output_path="card_3_lines.svg",
-        font_family="Times New Roman, Times, serif",
-        title_font_size=20,
-        type_font_size=20,
-        description_font_size=20,
-        title_padding_x=16,
-        title_padding_y=8,
-        type_padding_x=16,
-        type_padding_y=8,
-        description_padding_x=16,
-        description_padding_y=8,
-        stroke_width=1,
-        text_color="black",
-        box_fill="none",
-        box_stroke="black",
+def generate_field_card_svg(
+    title_text: str,
+    data_type_text: str,
+    description_text: str,
+    output_path: str = "card_3_lines.svg",
+) -> dict:
+    """
+    Промышленный фасад для генерации карточки из 3 строк.
+
+    Вход:
+    1) title_text — текст 1 прямоугольника
+    2) data_type_text — текст 2 прямоугольника (без квадратных скобок)
+    3) description_text — текст 3 прямоугольника
+    """
+    normalized_type = (data_type_text or "").strip()
+    if normalized_type.startswith("[") and normalized_type.endswith("]"):
+        normalized_type = normalized_type[1:-1].strip()
+    data_type_in_brackets = f"[{normalized_type}]" if normalized_type else "[]"
+
+    return make_svg_card_3_lines(
+        title=title_text,
+        data_type=data_type_in_brackets,
+        description=description_text,
+        output_path=output_path,
+        font_family=DEFAULT_FONT_FAMILY,
+        title_font_size=DEFAULT_FONT_SIZE,
+        type_font_size=DEFAULT_FONT_SIZE,
+        description_font_size=DEFAULT_FONT_SIZE,
+        title_padding_x=DEFAULT_TITLE_PADDING[0],
+        title_padding_y=DEFAULT_TITLE_PADDING[1],
+        type_padding_x=DEFAULT_TYPE_PADDING[0],
+        type_padding_y=DEFAULT_TYPE_PADDING[1],
+        description_padding_x=DEFAULT_DESCRIPTION_PADDING[0],
+        description_padding_y=DEFAULT_DESCRIPTION_PADDING[1],
+        stroke_width=DEFAULT_STROKE_WIDTH,
+        text_color=DEFAULT_TEXT_COLOR,
+        box_fill=DEFAULT_BOX_FILL,
+        box_stroke=DEFAULT_BOX_STROKE,
         background=None,
-        outer_padding=10,
-        vertical_gap=0,
-        fit_to_max_width=True,
-        as_single_cell=True,
+        outer_padding=DEFAULT_OUTER_PADDING,
+        vertical_gap=DEFAULT_VERTICAL_GAP,
+        fit_to_max_width=DEFAULT_FIT_TO_MAX_WIDTH,
+        as_single_cell=DEFAULT_AS_SINGLE_CELL,
+    )
+
+
+if __name__ == "__main__":
+    result = generate_field_card_svg(
+        title_text="Название поля",
+        data_type_text="string",
+        description_text="Описание поля",
+        output_path="card_3_lines.svg",
     )
 
     print("Успех: card_3_lines.svg")
