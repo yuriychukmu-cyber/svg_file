@@ -40,57 +40,21 @@ def _measure_text_tk(text: str, font_family: str, font_size: int) -> dict:
             root.destroy()
 
 
-def _add_text_box(
+def _draw_row_text(
     parent,
-    x: int,
-    y: int,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
     text: str,
     font_family: str,
     font_size: int,
-    padding_x: int,
-    padding_y: int,
-    stroke_width: int,
+    metrics: dict,
     text_color: str,
-    box_fill: str,
-    box_stroke: str,
-) -> dict:
-    """
-    Добавляет в SVG одну рамку с текстом.
-    x, y — верхний левый угол всего блока.
-    Возвращает размеры блока.
-    """
-    if not text:
-        text = " "
-
-    metrics = _measure_text_tk(text, font_family, font_size)
-    text_width = metrics["text_width"]
-    text_height = metrics["text_height"]
-    ascent = metrics["ascent"]
-
-    width = text_width + padding_x * 2 + stroke_width
-    height = text_height + padding_y * 2 + stroke_width
-
-    inner_left = x + stroke_width / 2
-    inner_top = y + stroke_width / 2
-    inner_width = width - stroke_width
-    inner_height = height - stroke_width
-
-    text_x = inner_left + inner_width / 2
-    text_y = inner_top + (inner_height - text_height) / 2 + ascent
-
-    SubElement(
-        parent,
-        "rect",
-        {
-            "x": str(x + stroke_width / 2),
-            "y": str(y + stroke_width / 2),
-            "width": str(width - stroke_width),
-            "height": str(height - stroke_width),
-            "fill": box_fill,
-            "stroke": box_stroke,
-            "stroke-width": str(stroke_width),
-        },
-    )
+) -> None:
+    """Рисует текст по центру указанной строки."""
+    text_x = x + width / 2
+    text_y = y + (height - metrics["text_height"]) / 2 + metrics["ascent"]
 
     text_el = SubElement(
         parent,
@@ -106,15 +70,6 @@ def _add_text_box(
         },
     )
     text_el.text = text
-
-    return {
-        "width": width,
-        "height": height,
-        "text_width": text_width,
-        "text_height": text_height,
-        "text_x": text_x,
-        "text_y": text_y,
-    }
 
 
 def make_svg_card_3_lines(
@@ -138,8 +93,9 @@ def make_svg_card_3_lines(
     box_stroke: str = "black",
     background: str | None = None,
     outer_padding: int = 10,
-    vertical_gap: int = 8,
-    fit_to_max_width: bool = False,
+    vertical_gap: int = 0,
+    fit_to_max_width: bool = True,
+    as_single_cell: bool = True,
 ) -> dict:
     """
     Создает SVG-карточку из 3 строк:
@@ -147,13 +103,8 @@ def make_svg_card_3_lines(
     2) тип данных
     3) описание
 
-    Каждая строка помещается в свою рамку.
-    Блоки располагаются вертикально.
-
-    Если fit_to_max_width=True:
-        все три рамки получают одинаковую ширину = ширине самого широкого блока.
-    Если fit_to_max_width=False:
-        каждая рамка подстраивается только под свою строку.
+    По умолчанию карточка рисуется как единая ячейка:
+    общий внешний прямоугольник + внутренние разделители строк.
     """
 
     title = title if title else " "
@@ -164,18 +115,14 @@ def make_svg_card_3_lines(
     type_metrics = _measure_text_tk(data_type, font_family, type_font_size)
     description_metrics = _measure_text_tk(description, font_family, description_font_size)
 
-    title_width = title_metrics["text_width"] + title_padding_x * 2 + stroke_width
-    title_height = title_metrics["text_height"] + title_padding_y * 2 + stroke_width
+    title_width = title_metrics["text_width"] + title_padding_x * 2
+    title_height = title_metrics["text_height"] + title_padding_y * 2
 
-    type_width = type_metrics["text_width"] + type_padding_x * 2 + stroke_width
-    type_height = type_metrics["text_height"] + type_padding_y * 2 + stroke_width
+    type_width = type_metrics["text_width"] + type_padding_x * 2
+    type_height = type_metrics["text_height"] + type_padding_y * 2
 
-    description_width = (
-        description_metrics["text_width"] + description_padding_x * 2 + stroke_width
-    )
-    description_height = (
-        description_metrics["text_height"] + description_padding_y * 2 + stroke_width
-    )
+    description_width = description_metrics["text_width"] + description_padding_x * 2
+    description_height = description_metrics["text_height"] + description_padding_y * 2
 
     if fit_to_max_width:
         common_width = max(title_width, type_width, description_width)
@@ -183,14 +130,11 @@ def make_svg_card_3_lines(
         type_width = common_width
         description_width = common_width
 
-    total_width = max(title_width, type_width, description_width) + outer_padding * 2
-    total_height = (
-        title_height
-        + type_height
-        + description_height
-        + vertical_gap * 2
-        + outer_padding * 2
-    )
+    content_width = max(title_width, type_width, description_width)
+    content_height = title_height + type_height + description_height + vertical_gap * 2
+
+    total_width = content_width + outer_padding * 2 + stroke_width
+    total_height = content_height + outer_padding * 2 + stroke_width
 
     svg = Element(
         "svg",
@@ -215,134 +159,129 @@ def make_svg_card_3_lines(
             },
         )
 
-    current_y = outer_padding
+    x = outer_padding + stroke_width / 2
+    y = outer_padding + stroke_width / 2
 
-    # Заголовок
-    x_title = outer_padding + (total_width - outer_padding * 2 - title_width) / 2
-    title_inner_left = x_title + stroke_width / 2
-    title_inner_top = current_y + stroke_width / 2
-    title_inner_width = title_width - stroke_width
-    title_inner_height = title_height - stroke_width
-    title_text_x = title_inner_left + title_inner_width / 2
-    title_text_y = (
-        title_inner_top
-        + (title_inner_height - title_metrics["text_height"]) / 2
-        + title_metrics["ascent"]
-    )
+    if as_single_cell:
+        SubElement(
+            svg,
+            "rect",
+            {
+                "x": str(x),
+                "y": str(y),
+                "width": str(content_width),
+                "height": str(content_height),
+                "fill": box_fill,
+                "stroke": box_stroke,
+                "stroke-width": str(stroke_width),
+            },
+        )
 
-    SubElement(
-        svg,
-        "rect",
-        {
-            "x": str(x_title + stroke_width / 2),
-            "y": str(current_y + stroke_width / 2),
-            "width": str(title_width - stroke_width),
-            "height": str(title_height - stroke_width),
-            "fill": box_fill,
-            "stroke": box_stroke,
-            "stroke-width": str(stroke_width),
-        },
-    )
-    title_el = SubElement(
-        svg,
-        "text",
-        {
-            "x": str(title_text_x),
-            "y": str(title_text_y),
-            "font-family": font_family,
-            "font-size": str(title_font_size),
-            "fill": text_color,
-            "text-anchor": "middle",
-            "xml:space": "preserve",
-        },
-    )
-    title_el.text = title
+        # Горизонтальные разделители между строками.
+        sep1_y = y + title_height + vertical_gap
+        sep2_y = sep1_y + type_height + vertical_gap
+        SubElement(
+            svg,
+            "line",
+            {
+                "x1": str(x),
+                "y1": str(sep1_y),
+                "x2": str(x + content_width),
+                "y2": str(sep1_y),
+                "stroke": box_stroke,
+                "stroke-width": str(stroke_width),
+            },
+        )
+        SubElement(
+            svg,
+            "line",
+            {
+                "x1": str(x),
+                "y1": str(sep2_y),
+                "x2": str(x + content_width),
+                "y2": str(sep2_y),
+                "stroke": box_stroke,
+                "stroke-width": str(stroke_width),
+            },
+        )
 
-    current_y += title_height + vertical_gap
+        row1_y = y
+        row2_y = sep1_y + vertical_gap
+        row3_y = sep2_y + vertical_gap
 
-    # Тип данных
-    x_type = outer_padding + (total_width - outer_padding * 2 - type_width) / 2
-    type_inner_left = x_type + stroke_width / 2
-    type_inner_top = current_y + stroke_width / 2
-    type_inner_width = type_width - stroke_width
-    type_inner_height = type_height - stroke_width
-    type_text_x = type_inner_left + type_inner_width / 2
-    type_text_y = (
-        type_inner_top
-        + (type_inner_height - type_metrics["text_height"]) / 2
-        + type_metrics["ascent"]
-    )
-
-    SubElement(
-        svg,
-        "rect",
-        {
-            "x": str(x_type + stroke_width / 2),
-            "y": str(current_y + stroke_width / 2),
-            "width": str(type_width - stroke_width),
-            "height": str(type_height - stroke_width),
-            "fill": box_fill,
-            "stroke": box_stroke,
-            "stroke-width": str(stroke_width),
-        },
-    )
-    type_el = SubElement(
-        svg,
-        "text",
-        {
-            "x": str(type_text_x),
-            "y": str(type_text_y),
-            "font-family": font_family,
-            "font-size": str(type_font_size),
-            "fill": text_color,
-            "text-anchor": "middle",
-            "xml:space": "preserve",
-        },
-    )
-    type_el.text = data_type
-
-    current_y += type_height + vertical_gap
-
-    # Описание
-    x_description = outer_padding + (total_width - outer_padding * 2 - description_width) / 2
-    description_inner_left = x_description + stroke_width / 2
-    description_inner_top = current_y + stroke_width / 2
-    description_inner_width = description_width - stroke_width
-    description_inner_height = description_height - stroke_width
-    description_text_x = description_inner_left + description_inner_width / 2
-    description_text_y = (
-        description_inner_top
-        + (description_inner_height - description_metrics["text_height"]) / 2
-        + description_metrics["ascent"]
-    )
-
-    SubElement(
-        svg,
-        "rect",
-        {
-            "x": str(x_description + stroke_width / 2),
-            "y": str(current_y + stroke_width / 2),
-            "width": str(description_width - stroke_width),
-            "height": str(description_height - stroke_width),
-            "fill": box_fill,
-            "stroke": box_stroke,
-            "stroke-width": str(stroke_width),
-        },
-    )
-    description_el = SubElement(
-        svg,
-        "text",
-        {
-            "x": str(description_text_x),
-            "y": str(description_text_y),
-            "font-family": font_family,
-            "font-size": str(description_font_size),
-            "fill": text_color,
-            "text-anchor": "middle",
-            "xml:space": "preserve",
-        },
-    )
-    description_el.text = description
+        _draw_row_text(
+            svg,
+            x,
+            row1_y,
+            content_width,
+            title_height,
+            title,
+            font_family,
+            title_font_size,
+            title_metrics,
+            text_color,
+        )
+        _draw_row_text(
+            svg,
+            x,
+            row2_y,
+            content_width,
+            type_height,
+            data_type,
+            font_family,
+            type_font_size,
+            type_metrics,
+            text_color,
+        )
+        _draw_row_text(
+            svg,
+            x,
+            row3_y,
+            content_width,
+            description_height,
+            description,
+            font_family,
+            description_font_size,
+            description_metrics,
+            text_color,
+        )
+    else:
+        # Режим старого поведения: отдельная рамка на каждую строку.
+        current_y = y
+        rows = [
+            (title, title_metrics, title_font_size, title_height),
+            (data_type, type_metrics, type_font_size, type_height),
+            (description, description_metrics, description_font_size, description_height),
+        ]
+        for idx, (text, metrics, font_size, row_h) in enumerate(rows):
+            SubElement(
+                svg,
+                "rect",
+                {
+                    "x": str(x),
+                    "y": str(current_y),
+                    "width": str(content_width),
+                    "height": str(row_h),
+                    "fill": box_fill,
+                    "stroke": box_stroke,
+                    "stroke-width": str(stroke_width),
+                },
+            )
+            _draw_row_text(
+                svg,
+                x,
+                current_y,
+                content_width,
+                row_h,
+                text,
+                font_family,
+                font_size,
+                metrics,
+                text_color,
+            )
+            current_y += row_h
+            if idx < 2:
+                current_y += vertical_gap
 
     svg_bytes = tostring(svg, encoding="utf-8", xml_declaration=True)
     svg_text = svg_bytes.decode("utf-8")
@@ -392,149 +331,10 @@ if __name__ == "__main__":
         box_stroke="black",
         background=None,
         outer_padding=10,
-        vertical_gap=8,
-        fit_to_max_width=False,  # True, если нужны одинаковые ширины рамок
+        vertical_gap=0,
+        fit_to_max_width=True,
+        as_single_cell=True,
     )
 
     print("Успех: card_3_lines.svg")
     print("Размер SVG:", result["width"], "x", result["height"])
-
-
-
-
-
-# from pathlib import Path
-# from xml.etree.ElementTree import Element, SubElement, tostring
-
-
-# def make_svg_text_box_tk_anchor_center(
-#     text: str,
-#     output_path: str = "text_box_tk_anchor_center.svg",
-#     font_family: str = "Times New Roman, Times, serif",
-#     font_size: int = 32,
-#     padding_x: int = 16,
-#     padding_y: int = 10,
-#     stroke_width: int = 2,
-#     text_color: str = "black",
-#     box_fill: str = "none",
-#     box_stroke: str = "black",
-#     background: str | None = None,
-# ) -> dict:
-#     """
-#     Создаёт SVG с текстом в рамке.
-#     Горизонтальное центрирование делается через text-anchor="middle".
-#     Вертикальное — через ascent/descent.
-#     """
-#     if not text:
-#         text = " "
-
-#     import tkinter as tk
-#     import tkinter.font as tkfont
-
-#     root = None
-#     try:
-#         root = tk.Tk()
-#         root.withdraw()
-
-#         font = tkfont.Font(root=root, family=font_family, size=font_size)
-
-#         text_width = int(font.measure(text))
-#         ascent = int(font.metrics("ascent"))
-#         descent = int(font.metrics("descent"))
-#         text_height = ascent + descent
-
-#         width = text_width + padding_x * 2 + stroke_width
-#         height = text_height + padding_y * 2 + stroke_width
-
-#         inner_left = stroke_width / 2
-#         inner_top = stroke_width / 2
-#         inner_width = width - stroke_width
-#         inner_height = height - stroke_width
-
-#         text_x = inner_left + inner_width / 2
-#         text_y = inner_top + (inner_height - text_height) / 2 + ascent
-
-#         svg = Element(
-#             "svg",
-#             {
-#                 "xmlns": "http://www.w3.org/2000/svg",
-#                 "width": str(width),
-#                 "height": str(height),
-#                 "viewBox": f"0 0 {width} {height}",
-#             },
-#         )
-
-#         if background is not None:
-#             SubElement(
-#                 svg,
-#                 "rect",
-#                 {
-#                     "x": "0",
-#                     "y": "0",
-#                     "width": str(width),
-#                     "height": str(height),
-#                     "fill": background,
-#                 },
-#             )
-
-#         SubElement(
-#             svg,
-#             "rect",
-#             {
-#                 "x": str(stroke_width / 2),
-#                 "y": str(stroke_width / 2),
-#                 "width": str(width - stroke_width),
-#                 "height": str(height - stroke_width),
-#                 "fill": box_fill,
-#                 "stroke": box_stroke,
-#                 "stroke-width": str(stroke_width),
-#             },
-#         )
-
-#         text_el = SubElement(
-#             svg,
-#             "text",
-#             {
-#                 "x": str(text_x),
-#                 "y": str(text_y),
-#                 "font-family": font_family,
-#                 "font-size": str(font_size),
-#                 "fill": text_color,
-#                 "text-anchor": "middle",
-#                 "xml:space": "preserve",
-#             },
-#         )
-#         text_el.text = text
-
-#         svg_bytes = tostring(svg, encoding="utf-8", xml_declaration=True)
-#         svg_text = svg_bytes.decode("utf-8")
-
-#         Path(output_path).write_text(svg_text, encoding="utf-8")
-
-#         return {
-#             "svg": svg_text,
-#             "width": width,
-#             "height": height,
-#             "text_width": text_width,
-#             "text_height": text_height,
-#             "text_x": text_x,
-#             "text_y": text_y,
-#         }
-
-#     finally:
-#         if root is not None:
-#             root.destroy()
-
-
-# if __name__ == "__main__":
-#     result = make_svg_text_box_tk_anchor_center(
-#         text="КУСОК SVG, работай, ибо я тебя придумал!!!!",
-#         output_path="text_box_tk_anchor_center.svg",
-#         font_family="Times New Roman, Times, serif",
-#         font_size=32,
-#         padding_x=20,
-#         padding_y=12,
-#         stroke_width=2,
-#     )
-
-#     print("Успех:", "text_box_tk_anchor_center.svg")
