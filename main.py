@@ -371,9 +371,9 @@ def generate_field_card_svg(
 
 if __name__ == "__main__":
     result = generate_field_card_svg(
-        title_text="Телефон",
+        title_text="Название поля",
         data_type_text="string",
-        description_text="8-800-555-35-35",
+        description_text="Описание поля",
         output_path="card_3_lines.svg",
     )
 

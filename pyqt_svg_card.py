@@ -25,14 +25,22 @@ DEFAULT_DESCRIPTION_PADDING = (16, 8)
 
 
 def _ensure_qt_app():
-    """Возвращает существующий QApplication или создает новый в offscreen-режиме."""
+    """Возвращает существующий QApplication или создает новый экземпляр."""
     from PyQt5.QtWidgets import QApplication
 
     app = QApplication.instance()
     if app is not None:
         return app
 
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    # Включаем offscreen только для Linux без DISPLAY.
+    # На Windows этот плагин часто отсутствует, из-за чего приложение не стартует.
+    if (
+        sys.platform.startswith("linux")
+        and not os.environ.get("DISPLAY")
+        and not os.environ.get("QT_QPA_PLATFORM")
+    ):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
     return QApplication(sys.argv[:1])
 
 
