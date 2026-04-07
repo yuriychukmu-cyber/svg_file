@@ -128,6 +128,11 @@ def make_svg_card_3_lines(
 ) -> dict:
     """Создает SVG-карточку из 3 строк."""
 
+    # Принудительно рендерим карточку как единый прямоугольник.
+    fit_to_max_width = True
+    as_single_cell = True
+    vertical_gap = 0
+
     title = title if title else " "
     data_type = data_type if data_type else " "
     description = description if description else " "
