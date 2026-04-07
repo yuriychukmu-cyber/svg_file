@@ -1,7 +1,15 @@
+from __future__ import annotations
+
+import os
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-DEFAULT_FONT_FAMILY = "Times New Roman, Times, serif"
+if TYPE_CHECKING:
+    from PyQt5.QtWidgets import QApplication
+
+DEFAULT_FONT_FAMILY = "Times New Roman"
 DEFAULT_FONT_SIZE = 20
 DEFAULT_STROKE_WIDTH = 1
 DEFAULT_TEXT_COLOR = "black"
@@ -16,42 +24,49 @@ DEFAULT_TYPE_PADDING = (16, 8)
 DEFAULT_DESCRIPTION_PADDING = (16, 8)
 
 
-def _measure_text_tk(text: str, font_family: str, font_size: int) -> dict:
-    """
-    Измеряет текст через tkinter.font.
-    Возвращает ширину, высоту, ascent, descent.
-    """
+def _ensure_qt_app():
+    """Возвращает существующий QApplication или создает новый экземпляр."""
+    from PyQt5.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is not None:
+        return app
+
+    # Включаем offscreen только для Linux без DISPLAY.
+    # На Windows этот плагин часто отсутствует, из-за чего приложение не стартует.
+    if (
+        sys.platform.startswith("linux")
+        and not os.environ.get("DISPLAY")
+        and not os.environ.get("QT_QPA_PLATFORM")
+    ):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
+    return QApplication(sys.argv[:1])
+
+
+def _measure_text_qt(text: str, font_family: str, font_size: int) -> dict:
+    """Измеряет текст через PyQt5 QFontMetrics."""
     if not text:
         text = " "
 
-    import tkinter as tk
-    import tkinter.font as tkfont
+    from PyQt5.QtGui import QFont, QFontMetrics
 
-    root = None
-    try:
-        root = tk.Tk()
-        root.withdraw()
+    _ensure_qt_app()
 
-        # Для tkinter лучше использовать одно имя семейства.
-        # Если передать строку с fallback через запятую, tkinter может понять это не так, как SVG.
-        tk_family = font_family.split(",")[0].strip()
+    font = QFont(font_family, font_size)
+    metrics = QFontMetrics(font)
 
-        font = tkfont.Font(root=root, family=tk_family, size=font_size)
+    text_width = int(metrics.horizontalAdvance(text))
+    ascent = int(metrics.ascent())
+    descent = int(metrics.descent())
+    text_height = int(metrics.height())
 
-        text_width = int(font.measure(text))
-        ascent = int(font.metrics("ascent"))
-        descent = int(font.metrics("descent"))
-        text_height = ascent + descent
-
-        return {
-            "text_width": text_width,
-            "text_height": text_height,
-            "ascent": ascent,
-            "descent": descent,
-        }
-    finally:
-        if root is not None:
-            root.destroy()
+    return {
+        "text_width": text_width,
+        "text_height": text_height,
+        "ascent": ascent,
+        "descent": descent,
+    }
 
 
 def _draw_row_text(
@@ -91,35 +106,27 @@ def make_svg_card_3_lines(
     data_type: str,
     description: str,
     output_path: str = "card_3_lines.svg",
-    font_family: str = "Times New Roman, Times, serif",
-    title_font_size: int = 20,
-    type_font_size: int = 20,
-    description_font_size: int = 20,
-    title_padding_x: int = 16,
-    title_padding_y: int = 8,
-    type_padding_x: int = 16,
-    type_padding_y: int = 8,
-    description_padding_x: int = 16,
-    description_padding_y: int = 8,
-    stroke_width: int = 1,
-    text_color: str = "black",
-    box_fill: str = "none",
-    box_stroke: str = "black",
+    font_family: str = DEFAULT_FONT_FAMILY,
+    title_font_size: int = DEFAULT_FONT_SIZE,
+    type_font_size: int = DEFAULT_FONT_SIZE,
+    description_font_size: int = DEFAULT_FONT_SIZE,
+    title_padding_x: int = DEFAULT_TITLE_PADDING[0],
+    title_padding_y: int = DEFAULT_TITLE_PADDING[1],
+    type_padding_x: int = DEFAULT_TYPE_PADDING[0],
+    type_padding_y: int = DEFAULT_TYPE_PADDING[1],
+    description_padding_x: int = DEFAULT_DESCRIPTION_PADDING[0],
+    description_padding_y: int = DEFAULT_DESCRIPTION_PADDING[1],
+    stroke_width: int = DEFAULT_STROKE_WIDTH,
+    text_color: str = DEFAULT_TEXT_COLOR,
+    box_fill: str = DEFAULT_BOX_FILL,
+    box_stroke: str = DEFAULT_BOX_STROKE,
     background: str | None = None,
-    outer_padding: int = 10,
-    vertical_gap: int = 0,
-    fit_to_max_width: bool = True,
-    as_single_cell: bool = True,
+    outer_padding: int = DEFAULT_OUTER_PADDING,
+    vertical_gap: int = DEFAULT_VERTICAL_GAP,
+    fit_to_max_width: bool = DEFAULT_FIT_TO_MAX_WIDTH,
+    as_single_cell: bool = DEFAULT_AS_SINGLE_CELL,
 ) -> dict:
-    """
-    Создает SVG-карточку из 3 строк:
-    1) название
-    2) тип данных
-    3) описание
-
-    По умолчанию карточка рисуется как единая ячейка:
-    общий внешний прямоугольник + внутренние разделители строк.
-    """
+    """Создает SVG-карточку из 3 строк."""
 
     # Принудительно рендерим карточку как единый прямоугольник.
     fit_to_max_width = True
@@ -130,9 +137,9 @@ def make_svg_card_3_lines(
     data_type = data_type if data_type else " "
     description = description if description else " "
 
-    title_metrics = _measure_text_tk(title, font_family, title_font_size)
-    type_metrics = _measure_text_tk(data_type, font_family, type_font_size)
-    description_metrics = _measure_text_tk(description, font_family, description_font_size)
+    title_metrics = _measure_text_qt(title, font_family, title_font_size)
+    type_metrics = _measure_text_qt(data_type, font_family, type_font_size)
+    description_metrics = _measure_text_qt(description, font_family, description_font_size)
 
     title_width = title_metrics["text_width"] + title_padding_x * 2
     title_height = title_metrics["text_height"] + title_padding_y * 2
@@ -196,7 +203,6 @@ def make_svg_card_3_lines(
             },
         )
 
-        # Горизонтальные разделители между строками.
         sep1_y = y + title_height + vertical_gap
         sep2_y = sep1_y + type_height + vertical_gap
         SubElement(
@@ -265,7 +271,6 @@ def make_svg_card_3_lines(
             text_color,
         )
     else:
-        # Режим старого поведения: отдельная рамка на каждую строку.
         current_y = y
         rows = [
             (title, title_metrics, title_font_size, title_height),
@@ -310,21 +315,6 @@ def make_svg_card_3_lines(
         "svg": svg_text,
         "width": total_width,
         "height": total_height,
-        "title_box": {
-            "width": title_width,
-            "height": title_height,
-            "text_width": title_metrics["text_width"],
-        },
-        "type_box": {
-            "width": type_width,
-            "height": type_height,
-            "text_width": type_metrics["text_width"],
-        },
-        "description_box": {
-            "width": description_width,
-            "height": description_height,
-            "text_width": description_metrics["text_width"],
-        },
     }
 
 
@@ -335,9 +325,8 @@ def generate_field_card_svg(
     output_path: str = "card_3_lines.svg",
 ) -> dict:
     """
-    Промышленный фасад для генерации карточки из 3 строк.
+    Производственный фасад с 3 параметрами.
 
-    Вход:
     1) title_text — текст 1 прямоугольника
     2) data_type_text — текст 2 прямоугольника (без квадратных скобок)
     3) description_text — текст 3 прямоугольника
@@ -352,25 +341,6 @@ def generate_field_card_svg(
         data_type=data_type_in_brackets,
         description=description_text,
         output_path=output_path,
-        font_family=DEFAULT_FONT_FAMILY,
-        title_font_size=DEFAULT_FONT_SIZE,
-        type_font_size=DEFAULT_FONT_SIZE,
-        description_font_size=DEFAULT_FONT_SIZE,
-        title_padding_x=DEFAULT_TITLE_PADDING[0],
-        title_padding_y=DEFAULT_TITLE_PADDING[1],
-        type_padding_x=DEFAULT_TYPE_PADDING[0],
-        type_padding_y=DEFAULT_TYPE_PADDING[1],
-        description_padding_x=DEFAULT_DESCRIPTION_PADDING[0],
-        description_padding_y=DEFAULT_DESCRIPTION_PADDING[1],
-        stroke_width=DEFAULT_STROKE_WIDTH,
-        text_color=DEFAULT_TEXT_COLOR,
-        box_fill=DEFAULT_BOX_FILL,
-        box_stroke=DEFAULT_BOX_STROKE,
-        background=None,
-        outer_padding=DEFAULT_OUTER_PADDING,
-        vertical_gap=DEFAULT_VERTICAL_GAP,
-        fit_to_max_width=DEFAULT_FIT_TO_MAX_WIDTH,
-        as_single_cell=DEFAULT_AS_SINGLE_CELL,
     )
 
 
@@ -379,8 +349,8 @@ if __name__ == "__main__":
         title_text="Название поля",
         data_type_text="string",
         description_text="Описание поля",
-        output_path="card_3_lines.svg",
+        output_path="card_3_lines_pyqt.svg",
     )
 
-    print("Успех: card_3_lines.svg")
+    print("Успех: card_3_lines_pyqt.svg")
     print("Размер SVG:", result["width"], "x", result["height"])
